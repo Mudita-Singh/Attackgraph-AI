@@ -1,0 +1,22 @@
+# Target Allowlist for AttackGraph AI
+# Security Requirement: Only endpoints/hosts explicitly declared here are valid scan targets.
+# Server-side validation will reject any target not present in this list.
+
+allowed_targets:
+  - name: juice-shop
+    host: localhost
+    port: 3000
+    urls:
+      - "http://localhost:3000"
+      - "http://127.0.0.1:3000"
+      - "http://juice-shop:3000"
+    description: "OWASP Juice Shop local docker container"
+
+  - name: dvwa
+    host: localhost
+    port: 8080
+    urls:
+      - "http://localhost:8080"
+      - "http://127.0.0.1:8080"
+      - "http://dvwa:80"
+    description: "Damn Vulnerable Web Application local docker container"

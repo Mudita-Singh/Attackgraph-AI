@@ -1,0 +1,30 @@
+services:
+  juice-shop:
+    image: bkimminich/juice-shop:latest
+    container_name: attackgraph-juice-shop
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  dvwa:
+    image: vulnerables/web-dvwa:latest
+    container_name: attackgraph-dvwa
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: attackgraph-postgres
+    environment:
+      POSTGRES_USER: attackgraph_user
+      POSTGRES_PASSWORD: attackgraph_password
+      POSTGRES_DB: attackgraph_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
