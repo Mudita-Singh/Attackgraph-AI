@@ -40,13 +40,14 @@ def test_nmap_scan_nonexistent_scan_id():
     assert response.status_code == 404
     assert "not found" in response.json()["detail"]
 
+
 def test_nmap_scan_real_container_juiceshop():
     # 1. Create a scan for Juice Shop (http://localhost:3000)
     scan_resp = client.post("/scans", json={"target_url": "http://localhost:3000"})
     assert scan_resp.status_code == 201
     scan_id = scan_resp.json()["id"]
 
-    # 2. Trigger Nmap scan against the real container
+    # 2. Trigger Nmap scan against Juice Shop
     nmap_resp = client.post(f"/scans/{scan_id}/nmap")
     assert nmap_resp.status_code == 200
 
@@ -54,11 +55,54 @@ def test_nmap_scan_real_container_juiceshop():
     assert data["scan_id"] == scan_id
     assert "evidence" in data
     assert data["evidence"]["tool_name"] == "nmap"
-    assert "parsed_findings" in data["evidence"]
-    assert "open_ports" in data["evidence"]["parsed_findings"]
 
-    # Verify nodes created for open ports
+    raw_output = data["evidence"]["raw_output"]
+    assert "Starting Nmap" in raw_output
+    assert "Nmap done:" in raw_output
+
     nodes = data["nodes"]
-    assert len(nodes) > 0
     ports_found = [n["properties"]["port"] for n in nodes]
-    assert 3000 in ports_found # Juice Shop container port
+
+    # Enforce strict scan scoping: ONLY port 3000 for Juice Shop
+    assert 3000 in ports_found
+    assert 8080 not in ports_found
+    assert 5432 not in ports_found
+
+def test_nmap_scan_real_container_dvwa():
+    # 1. Create a scan for DVWA (http://localhost:8080)
+    scan_resp = client.post("/scans", json={"target_url": "http://localhost:8080"})
+    assert scan_resp.status_code == 201
+    scan_id = scan_resp.json()["id"]
+
+    # 2. Trigger Nmap scan against DVWA
+    nmap_resp = client.post(f"/scans/{scan_id}/nmap")
+    assert nmap_resp.status_code == 200
+
+    data = nmap_resp.json()
+    assert data["scan_id"] == scan_id
+    assert "evidence" in data
+    assert data["evidence"]["tool_name"] == "nmap"
+
+    raw_output = data["evidence"]["raw_output"]
+    assert "Starting Nmap" in raw_output
+    assert "Nmap done:" in raw_output
+
+    nodes = data["nodes"]
+    ports_found = [n["properties"]["port"] for n in nodes]
+
+    # Enforce strict scan scoping: ONLY port 8080 for DVWA
+    assert 8080 in ports_found
+    assert 3000 not in ports_found
+    assert 5432 not in ports_found
+
+def test_nmap_scan_missing_binary_fails_loudly(monkeypatch):
+    import tools.nmap
+    monkeypatch.setattr(tools.nmap, "get_nmap_binary", lambda: None)
+
+    scan_resp = client.post("/scans", json={"target_url": "http://localhost:3000"})
+    scan_id = scan_resp.json()["id"]
+
+    nmap_resp = client.post(f"/scans/{scan_id}/nmap")
+    assert nmap_resp.status_code == 500
+    assert "Nmap binary not found" in nmap_resp.json()["detail"]
+

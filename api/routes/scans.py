@@ -1,10 +1,16 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db.database import get_db
 from db.models import Scan
-from api.schemas import ScanCreate, ScanResponse, NmapScanResponse
+from api.schemas import (
+    ScanCreate, ScanResponse, NmapScanResponse, FfufScanResponse,
+    HttpProbeRequest, HttpProbeResponse
+)
 from api.allowlist import allowlist_validator
 from tools.nmap import execute_nmap_scan
+from tools.ffuf import execute_ffuf_scan
+from tools.http_probe import execute_http_probe
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -51,3 +57,48 @@ def trigger_nmap_scan(scan_id: str, db: Session = Depends(get_db)):
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@router.post("/{scan_id}/ffuf", response_model=FfufScanResponse, status_code=status.HTTP_200_OK)
+def trigger_ffuf_scan(scan_id: str, db: Session = Depends(get_db)):
+    """
+    POST /scans/{scan_id}/ffuf
+    Executes ffuf endpoint scan against stored target_url of existing scan.
+    Returns created evidence and endpoint node references.
+    """
+    try:
+        result = execute_ffuf_scan(scan_id, db)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+@router.post("/{scan_id}/nodes/{node_id}/probe", response_model=HttpProbeResponse, status_code=status.HTTP_200_OK)
+def trigger_node_probe(
+    scan_id: str,
+    node_id: str,
+    probe_in: Optional[HttpProbeRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    POST /scans/{scan_id}/nodes/{node_id}/probe
+    Executes a targeted HTTP probe against a specific discovered node.
+    Enforces cross-scan node scoping (node.scan_id MUST match scan_id).
+    """
+    method = probe_in.method if probe_in else "GET"
+    body = probe_in.body if probe_in else None
+
+    try:
+        result = execute_http_probe(scan_id, node_id, db, method=method, body=body)
+        return result
+    except ValueError as e:
+        if "Security Violation" in str(e):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+

@@ -79,6 +79,22 @@ class NmapScanResponse(BaseModel):
     evidence: EvidenceResponse
     nodes: List[NodeResponse]
 
+class FfufScanResponse(BaseModel):
+    scan_id: str
+    evidence: EvidenceResponse
+    nodes: List[NodeResponse]
+
+class HttpProbeRequest(BaseModel):
+    method: str = "GET"
+    body: Optional[str] = None
+
+class HttpProbeResponse(BaseModel):
+    scan_id: str
+    node_id: str
+    evidence: EvidenceResponse
+
+
 class ErrorResponse(BaseModel):
+
     error: str
     detail: str

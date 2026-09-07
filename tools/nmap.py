@@ -1,5 +1,5 @@
+import os
 import shutil
-import socket
 import subprocess
 from datetime import datetime
 from urllib.parse import urlparse
@@ -9,38 +9,41 @@ from sqlalchemy.orm import Session
 from db.models import Scan, Node, Evidence
 from tools.envelope import ToolOutputEnvelope
 
-def scan_target_ports(host: str, target_port: int) -> List[Dict[str, Any]]:
+def get_nmap_binary() -> Optional[str]:
     """
-    Probe target ports to discover open services on host.
+    Locates the real Nmap executable, adding known fallback paths to PATH if needed.
     """
-    ports_to_check = list(dict.fromkeys([target_port, 80, 443, 3000, 8080, 5432]))
-    open_ports = []
+    nmap_path = shutil.which("nmap") or shutil.which("nmap.exe")
+    if nmap_path:
+        return nmap_path
 
-    for port in ports_to_check:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1.5)
-                result = s.connect_ex((host, port))
-                if result == 0:
-                    service = "http" if port in (80, 3000, 8080) else ("https" if port == 443 else ("postgresql" if port == 5432 else "unknown"))
-                    open_ports.append({
-                        "type": "open_port",
-                        "port": port,
-                        "service": service
-                    })
-        except Exception:
-            continue
-
-    return open_ports
+    candidate_dirs = [
+        r"C:\nmap\nmap-7.92",
+        r"C:\nmap",
+        r"C:\Program Files (x86)\Nmap",
+        r"C:\Program Files\Nmap",
+    ]
+    for d in candidate_dirs:
+        if os.path.exists(d):
+            if d not in os.environ.get("PATH", ""):
+                os.environ["PATH"] = d + os.pathsep + os.environ.get("PATH", "")
+            found = shutil.which("nmap") or shutil.which("nmap.exe")
+            if found:
+                return found
+            exe_path = os.path.join(d, "nmap.exe")
+            if os.path.isfile(exe_path):
+                return exe_path
+    return None
 
 def execute_nmap_scan(scan_id: str, db: Session) -> Dict[str, Any]:
     """
     Executes Nmap scan against target stored in scan record.
     1. Looks up scan record by scan_id.
-    2. Runs Nmap (or socket fallback if nmap binary is missing).
-    3. Wraps result in Section 18 ToolOutputEnvelope.
+    2. Runs Nmap CLI binary against the host & port derived from target_url.
+    3. Wraps result in ToolOutputEnvelope.
     4. Creates Evidence row in DB.
     5. Creates Node rows for open ports/services and links to Evidence.
+    Fails loudly if Nmap binary is missing or subprocess execution fails.
     """
     scan = db.query(Scan).filter(Scan.id == scan_id).first()
     if not scan:
@@ -51,42 +54,33 @@ def execute_nmap_scan(scan_id: str, db: Session) -> Dict[str, Any]:
     host = parsed.hostname or "localhost"
     port = parsed.port or (443 if parsed.scheme == "https" else 80)
 
-    nmap_binary = shutil.which("nmap")
-    raw_output = ""
+    nmap_binary = get_nmap_binary()
+    if not nmap_binary:
+        raise RuntimeError("Nmap binary not found. Real Nmap is required to run scan.")
+
+    cmd = [nmap_binary, "-Pn", "-sV", "-p", str(port), host]
+    try:
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+    except Exception as e:
+        raise RuntimeError(f"Nmap CLI execution failed: {str(e)}")
+
+    if res.returncode != 0 and not res.stdout:
+        raise RuntimeError(f"Nmap CLI failed with returncode {res.returncode}: {res.stderr}")
+
+    raw_output = res.stdout or res.stderr
     parsed_findings_list: List[Dict[str, Any]] = []
 
-    if nmap_binary:
-        try:
-            cmd = [nmap_binary, "-sV", "-p", str(port), host]
-            res = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-            raw_output = res.stdout
-            
-            # Simple line parsing of nmap output
-            for line in raw_output.splitlines():
-                if "/tcp" in line and "open" in line:
-                    parts = line.split()
-                    port_num = int(parts[0].split("/")[0])
-                    service_name = parts[2] if len(parts) > 2 else "unknown"
-                    parsed_findings_list.append({
-                        "type": "open_port",
-                        "port": port_num,
-                        "service": service_name
-                    })
-        except Exception as e:
-            raw_output = f"Nmap CLI execution failed: {str(e)}. Falling back to TCP socket probe."
-
-    # Fallback to python socket scan if nmap is unavailable or returned no output
-    if not parsed_findings_list:
-        parsed_findings_list = scan_target_ports(host, port)
-        lines = [
-            f"Starting Nmap 7.94 ( https://nmap.org ) at {datetime.utcnow().isoformat()}",
-            f"Nmap scan report for {host}",
-            "Host is up.",
-            "PORT     STATE SERVICE"
-        ]
-        for item in parsed_findings_list:
-            lines.append(f"{item['port']}/tcp  open  {item['service']}")
-        raw_output = "\n".join(lines)
+    # Simple line parsing of genuine nmap output
+    for line in raw_output.splitlines():
+        if "/tcp" in line and "open" in line:
+            parts = line.split()
+            port_num = int(parts[0].split("/")[0])
+            service_name = parts[2].rstrip('?') if len(parts) > 2 else "unknown"
+            parsed_findings_list.append({
+                "type": "open_port",
+                "port": port_num,
+                "service": service_name
+            })
 
     parsed_findings_dict = {"open_ports": parsed_findings_list}
 
@@ -143,3 +137,4 @@ def execute_nmap_scan(scan_id: str, db: Session) -> Dict[str, Any]:
         "nodes": created_nodes,
         "envelope": envelope
     }
+
