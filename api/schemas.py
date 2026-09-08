@@ -98,3 +98,42 @@ class ErrorResponse(BaseModel):
 
     error: str
     detail: str
+
+
+class AccessControlCheckRequest(BaseModel):
+    auth_token: Optional[str] = None
+    session_cookies: Optional[Dict[str, str]] = None
+
+
+class AccessControlCheckResponse(BaseModel):
+    scan_id: str
+    evidence: EvidenceResponse
+    finding: Dict[str, Any]
+    node: Optional[NodeResponse] = None
+    edge: Optional[EdgeResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReflectedInputCheckResponse(BaseModel):
+    scan_id: str
+    evidence: EvidenceResponse
+    classification: Dict[str, Any]
+    node: Optional[NodeResponse] = None
+    edge: Optional[EdgeResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AgentRunResponse(BaseModel):
+    scan_id: str
+    total_steps: int
+    max_steps: int
+    steps: List[Dict[str, Any]]
+    final_state: Dict[str, Any]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+

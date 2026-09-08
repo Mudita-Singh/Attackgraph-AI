@@ -13,3 +13,8 @@ index.html
 dashboard
 login.php
 db
+rest/products/1
+rest/basket/1
+api/Users/1
+rest/user/whoami
+rest/products/search?q=test

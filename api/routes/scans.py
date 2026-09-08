@@ -5,12 +5,18 @@ from db.database import get_db
 from db.models import Scan
 from api.schemas import (
     ScanCreate, ScanResponse, NmapScanResponse, FfufScanResponse,
-    HttpProbeRequest, HttpProbeResponse
+    HttpProbeRequest, HttpProbeResponse, AccessControlCheckRequest, AccessControlCheckResponse,
+    ReflectedInputCheckResponse, AgentRunResponse
 )
 from api.allowlist import allowlist_validator
 from tools.nmap import execute_nmap_scan
 from tools.ffuf import execute_ffuf_scan
 from tools.http_probe import execute_http_probe
+from tools.access_control_check import execute_access_control_check
+from tools.reflected_input_check import execute_reflected_input_check
+from agent.loop import run_agent_loop
+
+
 
 router = APIRouter(prefix="/scans", tags=["scans"])
 
@@ -99,6 +105,80 @@ def trigger_node_probe(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{scan_id}/nodes/{node_id}/access-control-check", response_model=AccessControlCheckResponse, status_code=status.HTTP_200_OK)
+def trigger_access_control_check(
+    scan_id: str,
+    node_id: str,
+    check_in: Optional[AccessControlCheckRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    POST /scans/{scan_id}/nodes/{node_id}/access-control-check
+    Executes access control check against a parameterized endpoint node.
+    Enforces cross-scan node scoping (node.scan_id MUST match scan_id).
+    """
+    auth_token = check_in.auth_token if check_in else None
+    session_cookies = check_in.session_cookies if check_in else None
+
+    try:
+        result = execute_access_control_check(
+            scan_id, node_id, db, session_cookies=session_cookies, auth_token=auth_token
+        )
+        return result
+    except ValueError as e:
+        if "Security Violation" in str(e):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{scan_id}/nodes/{node_id}/reflected-input-check", response_model=ReflectedInputCheckResponse, status_code=status.HTTP_200_OK)
+def trigger_reflected_input_check(
+    scan_id: str,
+    node_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    POST /scans/{scan_id}/nodes/{node_id}/reflected-input-check
+    Executes reflected input check against a query-parameterized endpoint node.
+    Enforces cross-scan node scoping (node.scan_id MUST match scan_id).
+    """
+    try:
+        result = execute_reflected_input_check(scan_id, node_id, db)
+        return result
+    except ValueError as e:
+        if "Security Violation" in str(e):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(e))
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.post("/{scan_id}/agent/run", response_model=AgentRunResponse, status_code=status.HTTP_200_OK)
+def trigger_agent_run(
+    scan_id: str,
+    max_steps: int = 15,
+    db: Session = Depends(get_db)
+):
+    """
+    POST /scans/{scan_id}/agent/run
+    Triggers the autonomous LLM function-calling agent decision loop for the scan.
+    Returns list of steps taken and final graph state summary.
+    """
+    try:
+        result = run_agent_loop(scan_id, db, max_steps=max_steps)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+
+
 
 
 
