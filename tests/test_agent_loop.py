@@ -62,28 +62,30 @@ def test_summarize_scan_state_structure():
 def make_mock_gemini_response(tool_name: str, args: dict, thought: str = "Test thought"):
     mock_part = MagicMock()
     mock_part.text = thought
-    mock_part.function_call = MagicMock()
-    mock_part.function_call.name = tool_name
-    mock_part.function_call.args = args
+
+    mock_func_call = MagicMock()
+    mock_func_call.name = tool_name
+    mock_func_call.args = args
 
     mock_candidate = MagicMock()
     mock_candidate.content.parts = [mock_part]
 
     mock_resp = MagicMock()
     mock_resp.candidates = [mock_candidate]
+    mock_resp.function_calls = [mock_func_call] if tool_name else []
     return mock_resp
 
 
-@patch("agent.loop.genai.GenerativeModel")
-def test_agent_loop_stops_on_no_further_action(mock_model_cls):
+@patch("agent.loop.genai.Client")
+def test_agent_loop_stops_on_no_further_action(mock_client_cls):
     db = TestingSessionLocal()
     scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
     db.add(scan)
     db.commit()
 
-    mock_model_instance = MagicMock()
-    mock_model_cls.return_value = mock_model_instance
-    mock_model_instance.generate_content.return_value = make_mock_gemini_response(
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
         "no_further_action", {"reason": "All checks complete."}
     )
 
@@ -94,8 +96,8 @@ def test_agent_loop_stops_on_no_further_action(mock_model_cls):
     assert res["steps"][0]["stop"] is True
 
 
-@patch("agent.loop.genai.GenerativeModel")
-def test_agent_loop_respects_max_steps(mock_model_cls):
+@patch("agent.loop.genai.Client")
+def test_agent_loop_respects_max_steps(mock_client_cls):
     db = TestingSessionLocal()
     scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
     db.add(scan)
@@ -110,11 +112,11 @@ def test_agent_loop_respects_max_steps(mock_model_cls):
     db.add(node)
     db.commit()
 
-    mock_model_instance = MagicMock()
-    mock_model_cls.return_value = mock_model_instance
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
 
     # Always return a duplicate action that gets rejected, so loop continues until max_steps
-    mock_model_instance.generate_content.return_value = make_mock_gemini_response(
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
         "reflected_input_check", {"node_id": node.id}
     )
 
@@ -130,8 +132,8 @@ def test_agent_loop_respects_max_steps(mock_model_cls):
         assert "Duplicate Action" in s["reason"]
 
 
-@patch("agent.loop.genai.GenerativeModel")
-def test_agent_loop_rejects_duplicate_action(mock_model_cls):
+@patch("agent.loop.genai.Client")
+def test_agent_loop_rejects_duplicate_action(mock_client_cls):
     db = TestingSessionLocal()
     scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
     db.add(scan)
@@ -151,9 +153,9 @@ def test_agent_loop_rejects_duplicate_action(mock_model_cls):
     db.add(ev)
     db.commit()
 
-    mock_model_instance = MagicMock()
-    mock_model_cls.return_value = mock_model_instance
-    mock_model_instance.generate_content.return_value = make_mock_gemini_response(
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
         "reflected_input_check", {"node_id": node.id}
     )
 
@@ -167,8 +169,8 @@ def test_agent_loop_rejects_duplicate_action(mock_model_cls):
     assert "REJECTED: Duplicate Action" in log.observation
 
 
-@patch("agent.loop.genai.GenerativeModel")
-def test_agent_loop_rejects_cross_scan_node(mock_model_cls):
+@patch("agent.loop.genai.Client")
+def test_agent_loop_rejects_cross_scan_node(mock_client_cls):
     db = TestingSessionLocal()
     scan_a = Scan(target_url="http://localhost:3000", status="INITIALIZED")
     scan_b = Scan(target_url="http://localhost:8080", status="INITIALIZED")
@@ -184,9 +186,9 @@ def test_agent_loop_rejects_cross_scan_node(mock_model_cls):
     db.add(node_b)
     db.commit()
 
-    mock_model_instance = MagicMock()
-    mock_model_cls.return_value = mock_model_instance
-    mock_model_instance.generate_content.return_value = make_mock_gemini_response(
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
         "reflected_input_check", {"node_id": node_b.id}
     )
 
@@ -200,8 +202,8 @@ def test_agent_loop_rejects_cross_scan_node(mock_model_cls):
 
 
 @patch("agent.loop.execute_access_control_check")
-@patch("agent.loop.genai.GenerativeModel")
-def test_agent_loop_handles_tool_execution_exception_and_prevents_retry(mock_model_cls, mock_acc_check):
+@patch("agent.loop.genai.Client")
+def test_agent_loop_handles_tool_execution_exception_and_prevents_retry(mock_client_cls, mock_acc_check):
     db = TestingSessionLocal()
     scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
     db.add(scan)
@@ -219,9 +221,9 @@ def test_agent_loop_handles_tool_execution_exception_and_prevents_retry(mock_mod
     # Mock tool execution to raise ValueError (e.g. endpoint has no identifier)
     mock_acc_check.side_effect = ValueError("Endpoint has no identifier to test for access control")
 
-    mock_model_instance = MagicMock()
-    mock_model_cls.return_value = mock_model_instance
-    mock_model_instance.generate_content.return_value = make_mock_gemini_response(
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
         "access_control_check", {"node_id": node.id}
     )
 
@@ -240,4 +242,76 @@ def test_agent_loop_handles_tool_execution_exception_and_prevents_retry(mock_mod
     step2_res = execute_agent_step(scan.id, db, step_number=2)
     assert step2_res["accepted"] is False
     assert "Duplicate Action" in step2_res["reason"]
+
+
+@patch("agent.loop.genai.Client")
+def test_agent_run_route_custom_max_steps(mock_client_cls):
+    scan_resp = client.post("/scans", json={"target_url": "http://localhost:3000"})
+    scan_id = scan_resp.json()["id"]
+
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
+        "no_further_action", {"reason": "Test complete"}
+    )
+
+    # Test via JSON body
+    res_body = client.post(f"/scans/{scan_id}/agent/run", json={"max_steps": 3})
+    assert res_body.status_code == 200
+    assert res_body.json()["max_steps"] == 3
+
+    # Test via query param
+    res_query = client.post(f"/scans/{scan_id}/agent/run?max_steps=5")
+    assert res_query.status_code == 200
+    assert res_query.json()["max_steps"] == 5
+
+
+@patch("agent.loop.time.sleep", return_value=None)
+@patch("agent.loop.genai.Client")
+def test_agent_step_handles_api_exception(mock_client_cls, mock_sleep):
+    db = TestingSessionLocal()
+    scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
+    db.add(scan)
+    db.commit()
+
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.side_effect = Exception("503 Service Unavailable")
+
+    step_res = execute_agent_step(scan.id, db, step_number=1)
+    assert step_res["accepted"] is False
+    assert step_res["stop"] is True
+    assert "503 Service Unavailable" in step_res["reason"]
+
+    # Verify retry attempts
+    assert mock_client_instance.models.generate_content.call_count == 3
+    assert mock_sleep.call_count == 2
+
+    # Verify AgentLog entry
+    log = db.query(AgentLog).filter(AgentLog.scan_id == scan.id).first()
+    assert log is not None
+    assert log.action == "api_error"
+    assert "503 Service Unavailable" in log.observation
+
+
+@patch("agent.loop.genai.Client")
+def test_agent_step_configures_http_timeout(mock_client_cls):
+    db = TestingSessionLocal()
+    scan = Scan(target_url="http://localhost:3000", status="INITIALIZED")
+    db.add(scan)
+    db.commit()
+
+    mock_client_instance = MagicMock()
+    mock_client_cls.return_value = mock_client_instance
+    mock_client_instance.models.generate_content.return_value = make_mock_gemini_response(
+        "no_further_action", {"reason": "Test complete"}
+    )
+
+    execute_agent_step(scan.id, db, step_number=1)
+
+    # Verify genai.Client was instantiated with http_options timeout
+    _, kwargs = mock_client_cls.call_args
+    assert "http_options" in kwargs
+    assert kwargs["http_options"].client_args == {"timeout": 30.0}
+
 

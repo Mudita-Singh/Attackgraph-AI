@@ -6,8 +6,9 @@ from db.models import Scan
 from api.schemas import (
     ScanCreate, ScanResponse, NmapScanResponse, FfufScanResponse,
     HttpProbeRequest, HttpProbeResponse, AccessControlCheckRequest, AccessControlCheckResponse,
-    ReflectedInputCheckResponse, AgentRunResponse
+    ReflectedInputCheckResponse, AgentRunResponse, AgentRunRequest
 )
+
 from api.allowlist import allowlist_validator
 from tools.nmap import execute_nmap_scan
 from tools.ffuf import execute_ffuf_scan
@@ -160,21 +161,25 @@ def trigger_reflected_input_check(
 @router.post("/{scan_id}/agent/run", response_model=AgentRunResponse, status_code=status.HTTP_200_OK)
 def trigger_agent_run(
     scan_id: str,
-    max_steps: int = 15,
+    run_in: Optional[AgentRunRequest] = None,
+    max_steps: Optional[int] = None,
     db: Session = Depends(get_db)
 ):
     """
     POST /scans/{scan_id}/agent/run
     Triggers the autonomous LLM function-calling agent decision loop for the scan.
-    Returns list of steps taken and final graph state summary.
+    Accepts max_steps in JSON body or query parameter (defaults to 15).
     """
+    steps_limit = max_steps if max_steps is not None else (run_in.max_steps if run_in and run_in.max_steps is not None else 15)
+
     try:
-        result = run_agent_loop(scan_id, db, max_steps=max_steps)
+        result = run_agent_loop(scan_id, db, max_steps=steps_limit)
         return result
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
 
 
 

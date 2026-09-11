@@ -125,6 +125,10 @@ class ReflectedInputCheckResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class AgentRunRequest(BaseModel):
+    max_steps: Optional[int] = 15
+
+
 class AgentRunResponse(BaseModel):
     scan_id: str
     total_steps: int
@@ -133,6 +137,7 @@ class AgentRunResponse(BaseModel):
     final_state: Dict[str, Any]
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 
