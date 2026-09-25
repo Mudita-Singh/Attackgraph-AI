@@ -139,6 +139,70 @@ class AgentRunResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class EvidenceSummary(BaseModel):
+    id: str
+    tool_name: str
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GraphNodeResponse(BaseModel):
+    id: str
+    label: str
+    node_type: str
+    is_critical: bool
+    properties: Dict[str, Any]
+    evidence: List[EvidenceSummary] = []
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GraphEdgeResponse(BaseModel):
+    id: str
+    source_node_id: str
+    target_node_id: str
+    relation_type: str
+    confidence: Optional[float] = None
+    status: str
+    reasoning: Optional[str] = None
+    pattern_key: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class GraphResponse(BaseModel):
+    scan_id: str
+    nodes: List[GraphNodeResponse]
+    edges: List[GraphEdgeResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class WeakestEdgeSummary(BaseModel):
+    id: str
+    source_node_id: str
+    target_node_id: str
+    relation_type: str
+    confidence: Optional[float] = None
+    reasoning: Optional[str] = None
+    pattern_key: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PathConfidenceResponse(BaseModel):
+    path: List[str]
+    node_ids: List[str]
+    edge_confidences: List[float]
+    path_confidence: float
+    weakest_edge: Optional[WeakestEdgeSummary] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+
 
 
 

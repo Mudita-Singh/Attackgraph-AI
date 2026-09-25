@@ -1,12 +1,14 @@
-from typing import Optional
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from db.database import get_db
-from db.models import Scan
+from db.models import Scan, Node, Edge, Evidence
 from api.schemas import (
     ScanCreate, ScanResponse, NmapScanResponse, FfufScanResponse,
     HttpProbeRequest, HttpProbeResponse, AccessControlCheckRequest, AccessControlCheckResponse,
-    ReflectedInputCheckResponse, AgentRunResponse, AgentRunRequest
+    ReflectedInputCheckResponse, AgentRunResponse, AgentRunRequest,
+    EvidenceResponse, EvidenceSummary, GraphNodeResponse, GraphEdgeResponse, GraphResponse,
+    PathConfidenceResponse
 )
 
 from api.allowlist import allowlist_validator
@@ -16,6 +18,8 @@ from tools.http_probe import execute_http_probe
 from tools.access_control_check import execute_access_control_check
 from tools.reflected_input_check import execute_reflected_input_check
 from agent.loop import run_agent_loop
+from graph.confidence import find_all_paths_to_node, calculate_path_confidence
+
 
 
 
@@ -179,6 +183,133 @@ def trigger_agent_run(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
     except RuntimeError as e:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+
+@router.get("/{scan_id}/graph", response_model=GraphResponse, status_code=status.HTTP_200_OK)
+def get_scan_graph(scan_id: str, db: Session = Depends(get_db)):
+    """
+    GET /scans/{scan_id}/graph
+    Returns full current graph for a scan: all nodes (with evidence summaries) and all edges.
+    Enforces scan_id scoping. Returns 404 if scan not found.
+    Returns empty nodes/edges lists (not an error) for a scan with nothing discovered yet.
+    """
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+
+    nodes = db.query(Node).filter(Node.scan_id == scan_id).all()
+    edges = db.query(Edge).filter(Edge.scan_id == scan_id).all()
+
+    node_responses = []
+    for node in nodes:
+        evidence_summaries = [
+            EvidenceSummary(
+                id=ev.id,
+                tool_name=ev.tool_name,
+                timestamp=ev.timestamp
+            )
+            for ev in node.evidence
+        ]
+        node_responses.append(
+            GraphNodeResponse(
+                id=node.id,
+                label=node.label,
+                node_type=node.node_type,
+                is_critical=node.is_critical,
+                properties=node.properties or {},
+                evidence=evidence_summaries
+            )
+        )
+
+    edge_responses = [
+        GraphEdgeResponse(
+            id=edge.id,
+            source_node_id=edge.source_node_id,
+            target_node_id=edge.target_node_id,
+            relation_type=edge.relation_type,
+            confidence=edge.confidence,
+            status=edge.status,
+            reasoning=edge.reasoning,
+            pattern_key=edge.pattern_key
+        )
+        for edge in edges
+    ]
+
+    return GraphResponse(
+        scan_id=scan_id,
+        nodes=node_responses,
+        edges=edge_responses
+    )
+
+
+@router.get("/{scan_id}/nodes/{node_id}/evidence", response_model=List[EvidenceResponse], status_code=status.HTTP_200_OK)
+def get_node_evidence(scan_id: str, node_id: str, db: Session = Depends(get_db)):
+    """
+    GET /scans/{scan_id}/nodes/{node_id}/evidence
+    Returns FULL evidence details (raw_output, parsed_findings, timestamp, tool_name)
+    for all evidence linked to a specific node.
+    Enforces cross-scan node ownership scoping (HTTP 403 if node belongs to a different scan).
+    """
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+
+    if node.scan_id != scan_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Security Violation: Node '{node_id}' does not belong to scan_id '{scan_id}'."
+        )
+
+    evidence_list = db.query(Evidence).filter(Evidence.node_id == node_id).all()
+    return evidence_list
+
+
+@router.get("/{scan_id}/nodes/{node_id}/path-confidence", response_model=List[PathConfidenceResponse], status_code=status.HTTP_200_OK)
+def get_node_path_confidence(scan_id: str, node_id: str, db: Session = Depends(get_db)):
+    """
+    GET /scans/{scan_id}/nodes/{node_id}/path-confidence
+    Finds all paths from root nodes to node_id, computes weakest-link path confidence for each,
+    and returns them sorted by path_confidence descending.
+    Enforces cross-scan node scoping.
+    """
+    scan = db.query(Scan).filter(Scan.id == scan_id).first()
+    if not scan:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Scan not found")
+
+    node = db.query(Node).filter(Node.id == node_id).first()
+    if not node:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Node not found")
+
+    if node.scan_id != scan_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Security Violation: Node '{node_id}' does not belong to scan_id '{scan_id}'."
+        )
+
+    paths = find_all_paths_to_node(node_id, scan_id, db)
+
+    results = []
+    for p in paths:
+        if len(p) >= 2:
+            path_info = calculate_path_confidence(p, db)
+            results.append(path_info)
+        elif len(p) == 1:
+            results.append({
+                "path": [node.label],
+                "node_ids": [node.id],
+                "edge_confidences": [],
+                "path_confidence": 1.0,
+                "weakest_edge": None
+            })
+
+    results.sort(key=lambda x: x["path_confidence"], reverse=True)
+    return results
+
+
 
 
 

@@ -136,21 +136,16 @@ def execute_agent_step(
     http_options = types.HttpOptions(client_args={"timeout": 30.0})
     client = genai.Client(api_key=api_key, http_options=http_options)
 
-    # SAFETY SETTINGS RATIONALE:
-    # This is NOT a blanket safety bypass; it narrows only HARM_CATEGORY_DANGEROUS_CONTENT
-    # to BLOCK_ONLY_HIGH (not BLOCK_NONE). The default threshold was producing false-positive
-    # refusals on legitimate diagnostic tool output being echoed back in the prompt context
-    # (e.g. raw HTTP response bodies from http_probe).
-    #
-    # Empirically verified: Scan a473a0ca suffered a mid-run refusal at Step 4 without this setting
-    # when raw endpoint response text was fed into conversation history, whereas Scan 84e922a9
-    # executed multi-step tool calls cleanly with it.
-    #
-    # Scope: This applies strictly within the project's hardcoded, allowlist-enforced local lab
-    # environment (Section 20).
     config = types.GenerateContentConfig(
         system_instruction=system_instruction,
         tools=AGENT_TOOLS,
+        # SAFETY SETTINGS RATIONALE:
+        # This is not a blanket safety bypass; it narrows only the DANGEROUS_CONTENT category
+        # to BLOCK_ONLY_HIGH (not BLOCK_NONE) because the default threshold was producing false-positive
+        # refusals on LEGITIMATE tool output being echoed back into the conversation (e.g. raw HTTP
+        # response bodies from http_probe). Confirmed empirically by comparing scan a473a0ca
+        # (refused mid-run without this setting) against scan 84e922a9 (succeeded with it).
+        # This applies strictly within the project's hardcoded, allowlist-enforced local lab environment (Section 20).
         safety_settings=[
             types.SafetySetting(
                 category=types.HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
