@@ -31,7 +31,7 @@ The project was executed across 19 planned engineering phases. The implementatio
 | **Phase 16** | Replay & Step Playback UI | Progressive event scrubber | Fully implemented (`api/routes/scans.py`) | `test_replay.py` (100% pass) |
 | **Phase 17** | Offline Calibration Evaluation | ECE & Brier score evaluation | Fully implemented (`graph/calibration.py`) | `test_calibration.py` (100% pass) |
 | **Phase 18** | Adaptive Pattern Confidence | Online Bayesian prior learning | Fully implemented (`graph/pattern_learning.py`) | `test_pattern_learning.py` (100% pass) |
-| **Phase 19** | End-to-End Run & Report | Final pipeline run & docs | Fully completed (`docs/end_to_end_run_2026_10_06.md`) | Full 93-test suite pass |
+| **Phase 19** | End-to-End Run & Report | Final pipeline run & docs | Completed with disclosures: live loop ran 5 real tool steps (nmap, ffuf, 2× access_control_check, reflected_input_check, 2× http_probe), stopped on two Gemini 503 errors; one edge manually constructed for propagation/calibration/Bayesian-learning demo (same pattern as Phase 13/14). See `docs/end_to_end_run_2026_10_06.md`. | Full 93-test suite pass |
 
 ---
 
@@ -53,9 +53,10 @@ The system establishes five distinct technical contributions to agentic AI for c
 
 In addition to initial architectural bounds, actual implementation revealed key practical findings:
 
-1. **LLM Availability & Rate Limits (503 / 429 Errors):** Upstream LLM API endpoints occasionally experience temporary high-demand capacity limits. The agent loop handles this via graceful degradation: recording `api_error` in `agent_log` and saving current state so execution can be resumed cleanly.
-2. **Safety Filter Handling:** Automated security probes must format payloads neutrally to avoid triggering upstream safety filters while maintaining diagnostic fidelity against target applications.
-3. **Database Verification Discipline:** Early phase testing identified isolation risks between in-memory SQLite fixtures and live PostgreSQL database tables. Strict verification protocols were enforced requiring all live API tests to validate directly against the running `attackgraph-postgres` container.
+1. **LLM Availability & Rate Limits (503 / 429 Errors):** Upstream LLM API endpoints occasionally experience temporary high-demand capacity limits. The agent loop handles this via graceful degradation: recording `api_error` in `agent_log` and saving current state so execution can be resumed cleanly. The Phase 19 end-to-end run specifically encountered two 503 errors — the loop stopped after 5 substantive tool steps rather than reaching `no_further_action` naturally.
+2. **Unauthenticated IDOR Results are Legitimately Negative:** Both live `access_control_check` calls in the Phase 19 run against `/rest/basket/1` and `/api/Users/1` returned `401 Unauthorized` on both probes, correctly producing `is_potential_issue: false, confidence: 0.0`. No finding was flagged by the agent. This is an honest negative result, documented as such (consistent with Phase 8's zero-secrets-found result). The edge used to exercise human-review, propagation, calibration, and Bayesian-learning mechanics in that run was manually constructed after the fact — the same approach used for Phase 13/14 constructed scans — and is clearly labelled as such in `docs/end_to_end_run_2026_10_06.md`.
+3. **Safety Filter Handling:** Automated security probes must format payloads neutrally to avoid triggering upstream safety filters while maintaining diagnostic fidelity against target applications.
+4. **Database Verification Discipline:** Early phase testing identified isolation risks between in-memory SQLite fixtures and live PostgreSQL database tables. Strict verification protocols were enforced requiring all live API tests to validate directly against the running `attackgraph-postgres` container.
 
 ---
 
