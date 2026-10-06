@@ -33,6 +33,7 @@ class Node(Base):
     label = Column(String(255), nullable=False)
     node_type = Column(String(100), nullable=False) # e.g., service, vulnerability, credential, asset
     is_critical = Column(Boolean, default=False, nullable=False) # Section 15/16 critical node analysis
+    undermined = Column(Boolean, default=False, nullable=False) # Section 13 human-correction propagation
     properties = Column(JSON, default=dict)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
 
@@ -51,7 +52,8 @@ class Edge(Base):
     target_node_id = Column(String(36), ForeignKey("nodes.id"), nullable=False)
     relation_type = Column(String(100), nullable=False) # e.g., EXPLOITS, HAS_VULNERABILITY, LEADS_TO
     pattern_key = Column(String(255), nullable=True, index=True) # Section 16 spec: pattern matching & stats
-    confidence = Column(Float, nullable=True) # Section 11.2/11.6 path confidence score
+    confidence = Column(Float, nullable=True) # Section 11.2/11.6 path confidence score (blended final confidence)
+    evidence_only_confidence = Column(Float, nullable=True) # Section 34.6 unblended raw evidence score
     status = Column(String(50), nullable=False, default="unverified") # unverified, verified, refuted, human_invalidated
     verification_outcome = Column(String(100), nullable=True) # Section 34 pattern learning
     reasoning = Column(Text, nullable=True) # LLM justification
@@ -113,8 +115,8 @@ class HumanCorrection(Base):
 class PatternStats(Base):
     __tablename__ = "pattern_stats"
 
-    id = Column(String(36), primary_key=True, default=generate_uuid)
-    pattern_key = Column(String(255), unique=True, nullable=False, index=True)
-    occurrence_count = Column(Integer, default=0, nullable=False)
-    success_rate = Column(Float, default=0.0, nullable=False)
-    last_observed_at = Column(DateTime, default=datetime.datetime.utcnow)
+    pattern_key = Column(String(255), primary_key=True)
+    times_verified = Column(Integer, nullable=False, default=0)
+    times_refuted = Column(Integer, nullable=False, default=0)
+    last_updated = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+

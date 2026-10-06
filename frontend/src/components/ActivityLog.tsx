@@ -1,0 +1,126 @@
+import React, { useState } from 'react';
+import type { AgentLog } from '../types';
+import { CheckCircle2, XCircle, ChevronLeft, ChevronRight, ListFilter, Terminal } from 'lucide-react';
+
+interface ActivityLogProps {
+  logs: AgentLog[];
+  loading: boolean;
+  activeStepNumber?: number | null;
+  onSelectStep?: (stepNumber: number) => void;
+}
+
+export const ActivityLog: React.FC<ActivityLogProps> = ({
+  logs,
+  loading,
+  activeStepNumber,
+  onSelectStep,
+}) => {
+  const [collapsed, setCollapsed] = useState(false);
+
+  if (collapsed) {
+    return (
+      <aside className="w-10 bg-[#10141d] border-r border-[#262c38] flex flex-col items-center py-3 select-none shrink-0 transition-all">
+        <button
+          onClick={() => setCollapsed(false)}
+          className="p-1.5 text-[#8a94a6] hover:text-[#e6e6e6] rounded hover:bg-[#262c38] cursor-pointer"
+          title="Expand Activity Log"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+        <div className="mt-4 rotate-90 origin-left text-xs font-mono text-[#8a94a6] tracking-widest uppercase whitespace-nowrap">
+          Activity Log ({logs.length})
+        </div>
+      </aside>
+    );
+  }
+
+  return (
+    <aside className="w-64 bg-[#10141d] border-r border-[#262c38] flex flex-col shrink-0 select-none transition-all z-10">
+      {/* Header */}
+      <div className="h-10 px-3 border-b border-[#262c38] flex items-center justify-between bg-[#0a0e14]/50">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#e6e6e6]">
+          <ListFilter className="w-3.5 h-3.5 text-[#FFAA00]" />
+          <span>Agent Activity</span>
+          <span className="px-1.5 py-0.2 rounded bg-[#262c38] text-[#8a94a6] text-[10px] font-mono">
+            {logs.length}
+          </span>
+        </div>
+        <button
+          onClick={() => setCollapsed(true)}
+          className="p-1 text-[#8a94a6] hover:text-[#e6e6e6] rounded hover:bg-[#262c38] cursor-pointer"
+          title="Collapse Sidebar"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* Log list */}
+      <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        {loading ? (
+          <div className="text-xs text-[#6b7280] font-mono text-center py-6 animate-pulse">
+            Loading activity log...
+          </div>
+        ) : logs.length === 0 ? (
+          <div className="text-xs text-[#6b7280] font-mono text-center py-6">
+            No agent steps logged for this scan.
+          </div>
+        ) : (
+          logs.map((log) => {
+            const isError = log.observation?.toLowerCase().includes('error') || log.observation?.toLowerCase().includes('rejected') || log.observation?.toLowerCase().includes('failed');
+            const isActive = activeStepNumber !== undefined && activeStepNumber !== null && log.step_number === activeStepNumber;
+
+            return (
+              <div
+                key={log.id || log.step_number}
+                onClick={() => onSelectStep?.(log.step_number)}
+                className={`border rounded p-2.5 text-xs transition-all cursor-pointer ${
+                  isActive
+                    ? 'bg-[#E040FB]/15 border-[#E040FB] ring-2 ring-[#E040FB]/40 shadow-lg'
+                    : 'bg-[#0a0e14] border-[#262c38] hover:border-[#333c4a]'
+                }`}
+              >
+                {/* Step header */}
+                <div className="flex items-center justify-between gap-1 mb-1">
+                  <span className="font-mono text-[#FFAA00] font-semibold text-[11px]">
+                    Step #{log.step_number}
+                  </span>
+                  <div className="flex items-center gap-1">
+                    {isError ? (
+                      <XCircle className="w-3.5 h-3.5 text-[#FF3B3B] shrink-0" />
+                    ) : (
+                      <CheckCircle2 className="w-3.5 h-3.5 text-[#00E676] shrink-0" />
+                    )}
+                  </div>
+                </div>
+
+                {/* Action / Tool badge */}
+                {log.action && (
+                  <div className="mb-1.5">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[#1a2030] text-[#e6e6e6] border border-[#333c4a]">
+                      <Terminal className="w-3 h-3 text-[#8a94a6]" />
+                      <span className="truncate max-w-[170px]">{log.action}</span>
+                    </span>
+                  </div>
+                )}
+
+                {/* Thought text */}
+                {log.thought && (
+                  <p className="text-[#8a94a6] text-[11px] leading-relaxed mb-1 line-clamp-2">
+                    {log.thought}
+                  </p>
+                )}
+
+                {/* Observation snippet */}
+                {log.observation && (
+                  <div className="font-mono text-[10px] bg-[#10141d] p-1.5 rounded border border-[#262c38] text-[#e6e6e6] line-clamp-2 break-all">
+                    {log.observation}
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </aside>
+  );
+};

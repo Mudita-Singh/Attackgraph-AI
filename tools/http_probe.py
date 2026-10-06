@@ -128,14 +128,20 @@ def execute_http_probe(
         db.add(secret_node)
         db.flush()
 
+        pattern_key = secret["pattern_key"]
+        evidence_score = secret["confidence"]
+        from graph.pattern_learning import blend_confidence
+        blend_res = blend_confidence(evidence_score, pattern_key, db)
+
         # Create edge from probed endpoint node -> secret node
         edge = Edge(
             scan_id=scan.id,
             source_node_id=node.id,
             target_node_id=secret_node.id,
             relation_type="exposes_secret",
-            pattern_key=secret["pattern_key"],
-            confidence=secret["confidence"],
+            pattern_key=pattern_key,
+            confidence=blend_res["final_confidence"],
+            evidence_only_confidence=evidence_score,
             status="verified",
             reasoning=f"Pattern '{secret['name']}' matched in response from '{target_full_url}': {secret['description']}",
             properties={

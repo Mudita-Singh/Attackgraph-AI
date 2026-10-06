@@ -152,6 +152,7 @@ class GraphNodeResponse(BaseModel):
     label: str
     node_type: str
     is_critical: bool
+    undermined: bool = False
     properties: Dict[str, Any]
     evidence: List[EvidenceSummary] = []
 
@@ -179,6 +180,15 @@ class GraphResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ReplayEventResponse(BaseModel):
+    event_type: str  # "node_created" | "edge_created"
+    timestamp: datetime
+    step_number: Optional[int] = None
+    data: Dict[str, Any]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class WeakestEdgeSummary(BaseModel):
     id: str
     source_node_id: str
@@ -199,6 +209,131 @@ class PathConfidenceResponse(BaseModel):
     weakest_edge: Optional[WeakestEdgeSummary] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EdgeReverifyRequest(BaseModel):
+    auth_token: Optional[str] = None
+    session_cookies: Optional[Dict[str, str]] = None
+
+
+class EdgeReverifyResponse(BaseModel):
+    eligible: bool
+    edge_id: str
+    old_status: Optional[str] = None
+    new_status: Optional[str] = None
+    confidence: Optional[float] = None
+    verification_outcome: Optional[str] = None
+    evidence_id: Optional[str] = None
+    reason: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+class PropagationResultSummary(BaseModel):
+    invalidated_edge_id: str
+    scan_id: str
+    downstream_nodes_checked: int
+    undermined_nodes: List[str]
+    still_supported_nodes: List[str]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class HumanReviewRequest(BaseModel):
+    decision: str  # "confirm" or "refute"
+    reviewer: Optional[str] = "human_reviewer"
+    reason: Optional[str] = None
+
+
+class HumanReviewResponse(BaseModel):
+    edge_id: str
+    scan_id: str
+    decision: str
+    new_status: str
+    verification_outcome: str
+    correction_id: str
+    propagation_result: Optional[PropagationResultSummary] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class NodeImpactSummary(BaseModel):
+    node_id: str
+    label: str
+    node_type: str
+    downstream_count: int
+    nodes_disconnected_if_removed: List[str]
+    disconnection_impact_score: int
+    is_critical: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CriticalNodeAnalysisResponse(BaseModel):
+    scan_id: str
+    critical_node_id: Optional[str] = None
+    critical_node: Optional[NodeResponse] = None
+    disconnection_impact_score: int
+    tie_existed: bool
+    tie_break_reason: Optional[str] = None
+    ranked_nodes: List[NodeImpactSummary]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CriticalNodeResponse(BaseModel):
+    scan_id: str
+    critical_node: Optional[NodeResponse] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AgentLogResponse(BaseModel):
+    id: str
+    scan_id: str
+    step_number: int
+    thought: Optional[str] = None
+    action: Optional[str] = None
+    observation: Optional[str] = None
+    timestamp: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class CalibrationBucketResponse(BaseModel):
+    range: str
+    count: int
+    mean_stated_confidence: Optional[float] = None
+    observed_rate: Optional[float] = None
+    note: Optional[str] = None
+
+
+class CalibrationReportResponse(BaseModel):
+    total_edges_with_outcome: int
+    total_edges_unverified_excluded: int
+    buckets: List[CalibrationBucketResponse]
+    ece: Optional[float] = None
+    brier_score: Optional[float] = None
+    sample_size_warning: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PatternStatsResponse(BaseModel):
+    pattern_key: str
+    times_verified: int
+    times_refuted: int
+    prior_confidence: float
+    observation_count: int
+    last_updated: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
+
+
 
 
 

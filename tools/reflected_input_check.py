@@ -161,12 +161,18 @@ def execute_reflected_input_check(scan_id: str, node_id: str, db: Session) -> Di
         db.add(new_node)
         db.flush()
 
+        pattern_key = "reflected_input:unencoded_html_context" if not classification["encoded"] else "reflected_input:encoded_context"
+        evidence_score = confidence
+        from graph.pattern_learning import blend_confidence
+        blend_res = blend_confidence(evidence_score, pattern_key, db)
+
         edge = Edge(
             scan_id=scan.id,
             source_node_id=node.id,
             target_node_id=new_node.id,
             relation_type="possible_reflected_input",
-            confidence=confidence,
+            confidence=blend_res["final_confidence"],
+            evidence_only_confidence=evidence_score,
             status="unverified",
             reasoning=(
                 f"A unique marker inserted into '{param_name}' was reflected back "
@@ -175,7 +181,7 @@ def execute_reflected_input_check(scan_id: str, node_id: str, db: Session) -> Di
                 f"Reflection alone does not confirm exploitability - this is an "
                 f"observation for human review, not a confirmed vulnerability."
             ),
-            pattern_key="reflected_input:unencoded_html_context" if not classification["encoded"] else "reflected_input:encoded_context",
+            pattern_key=pattern_key,
         )
         db.add(edge)
         db.flush()

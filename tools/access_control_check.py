@@ -200,15 +200,21 @@ def execute_access_control_check(
         db.add(new_node)
         db.flush()
 
+        pattern_key = "access_control_check:same_session_different_identifier"
+        evidence_score = finding["confidence"]
+        from graph.pattern_learning import blend_confidence
+        blend_res = blend_confidence(evidence_score, pattern_key, db)
+
         edge = Edge(
             scan_id=scan.id,
             source_node_id=node.id,
             target_node_id=new_node.id,
             relation_type="possible_access_control_issue",
-            confidence=finding["confidence"],
+            confidence=blend_res["final_confidence"],
+            evidence_only_confidence=evidence_score,
             status="unverified",
             reasoning=finding["reasoning"],
-            pattern_key="access_control_check:same_session_different_identifier",
+            pattern_key=pattern_key,
         )
         db.add(edge)
         db.flush()

@@ -98,3 +98,22 @@ def test_create_scan_disallowed_arbitrary_ip():
     response = client.post("/scans", json={"target_url": "http://192.168.1.1:8080"})
     assert response.status_code == 403
     assert "Security Violation" in response.json()["detail"]
+
+
+def test_list_scans_endpoint():
+    response = client.get("/scans")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+    assert len(data) >= 1
+
+
+def test_get_agent_log_endpoint():
+    # Create scan first
+    scan_resp = client.post("/scans", json={"target_url": "http://localhost:3000"})
+    scan_id = scan_resp.json()["id"]
+
+    response = client.get(f"/scans/{scan_id}/agent-log")
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
