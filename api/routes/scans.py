@@ -254,7 +254,8 @@ def get_scan_graph(scan_id: str, db: Session = Depends(get_db)):
                 is_critical=node.is_critical,
                 undermined=node.undermined,
                 properties=node.properties or {},
-                evidence=evidence_summaries
+                evidence=evidence_summaries,
+                created_at=node.created_at
             )
         )
 

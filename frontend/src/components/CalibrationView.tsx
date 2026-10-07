@@ -1,17 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import type { Scan, CalibrationReport } from '../types';
 import { fetchGlobalCalibration, fetchScanCalibration } from '../api/client';
-import { BarChart3, AlertTriangle, RefreshCw } from 'lucide-react';
+import { BarChart3, AlertTriangle, RefreshCw, HelpCircle } from 'lucide-react';
+
 
 interface CalibrationViewProps {
   scans: Scan[];
   onClose: () => void;
 }
 
-export const CalibrationView: React.FC<CalibrationViewProps> = ({
-  scans,
-  onClose,
-}) => {
+export const CalibrationView: React.FC<CalibrationViewProps> = ({ scans }) => {
   const [scope, setScope] = useState<'global' | string>('global');
   const [report, setReport] = useState<CalibrationReport | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -38,137 +36,207 @@ export const CalibrationView: React.FC<CalibrationViewProps> = ({
   }, [scope]);
 
   return (
-    <div className="fixed inset-0 bg-[#0a0e14]/90 backdrop-blur-md z-50 flex flex-col overflow-hidden select-none">
-      {/* Modal Header */}
-      <header className="h-14 bg-[#10141d] border-b border-[#262c38] px-6 flex items-center justify-between shrink-0">
+    <div className="flex-1 bg-[#0B0D1A] flex flex-col overflow-y-auto p-6 space-y-6 select-none font-sans text-slate-200">
+      {/* 1. Header & Scope Selector */}
+      <div className="bg-[#12152A] border border-[#ffffff14] rounded-2xl p-5 flex flex-wrap items-center justify-between gap-4 shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded bg-[#FFAA00]/10 border border-[#FFAA00]/30 flex items-center justify-center text-[#FFAA00]">
+          <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
             <BarChart3 className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-sm font-bold tracking-wider text-[#e6e6e6] uppercase flex items-center gap-2">
-              OFFLINE CALIBRATION & EVALUATION <span className="text-[#FFAA00] text-xs font-mono font-normal">Section 11.5</span>
+            <h2 className="text-base font-bold text-slate-100 flex items-center gap-2 uppercase tracking-wider">
+              Offline Calibration & Evaluation
             </h2>
+            <p className="text-xs text-slate-400 font-sans">
+              Comparing stated confidence estimates against empirical ground-truth verification outcomes
+            </p>
           </div>
         </div>
 
-        {/* Scope Selector */}
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-[#0a0e14] px-3 py-1.5 rounded border border-[#262c38]">
-            <span className="text-xs font-mono text-[#8a94a6]">Scope:</span>
+          <div className="bg-[#0B0D1A] border border-[#ffffff14] px-3.5 py-1.5 rounded-xl flex items-center gap-2">
+            <span className="text-xs font-mono text-slate-400">Scope:</span>
             <select
               value={scope}
               onChange={(e) => setScope(e.target.value)}
-              className="bg-[#10141d] text-[#e6e6e6] text-xs font-mono border border-[#333c4a] rounded px-2.5 py-1 cursor-pointer focus:outline-none focus:border-[#FFAA00]"
+              className="bg-[#12152A] text-slate-100 text-xs font-mono border border-[#ffffff14] rounded-lg px-2.5 py-1 cursor-pointer focus:outline-none focus:border-[#6366F1]"
             >
-              <option value="global">All Scans (Aggregated)</option>
+              <option value="global">All Scans (Global Aggregated)</option>
               {scans.map((s) => (
                 <option key={s.id} value={s.id}>
-                  Scan {s.id.slice(0, 8)} ({s.target_url})
+                  Scan #{s.id.slice(0, 8)} ({s.target_url})
                 </option>
               ))}
             </select>
           </div>
-
-          <button
-            onClick={onClose}
-            className="px-3 py-1.5 bg-[#262c38] hover:bg-[#333c4a] text-[#e6e6e6] text-xs font-mono rounded transition cursor-pointer"
-          >
-            Close View
-          </button>
         </div>
-      </header>
+      </div>
 
-      {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto p-8 max-w-6xl mx-auto w-full space-y-6">
-        {loading ? (
-          <div className="flex items-center justify-center py-20 text-xs font-mono text-[#FFAA00] gap-2">
-            <RefreshCw className="w-5 h-5 animate-spin" />
-            <span>Computing Calibration Metrics...</span>
+      {/* 2. ALWAYS-Visible Sample Size Warning Banner */}
+      <div className="bg-amber-500/15 border-2 border-amber-500/40 rounded-2xl p-4 flex items-start gap-3 shadow-xl">
+        <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+        <div className="flex-1 space-y-1">
+          <h4 className="text-xs font-bold uppercase tracking-wider text-amber-400 font-mono">
+            STATISTICAL SAMPLE SIZE WARNING
+          </h4>
+          <p className="text-xs font-mono text-slate-200 leading-relaxed">
+            {report?.sample_size_warning || "WARNING: Evaluated sample size N < 30 edges. Calibration statistics (ECE, Brier, reliability diagram) are preliminary observations."}
+          </p>
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="flex-1 flex flex-col items-center justify-center py-20 text-xs font-mono text-amber-400 gap-3">
+          <RefreshCw className="w-6 h-6 animate-spin" />
+          <span>Computing Calibration Metrics & Reliability Diagram...</span>
+        </div>
+      ) : error ? (
+        <div className="bg-rose-500/15 border border-rose-500/30 text-rose-400 p-4 rounded-2xl font-mono text-xs flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{error}</span>
+        </div>
+      ) : report ? (
+        <>
+
+
+          {/* 3. Headline Metrics Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-[#12152A] border border-[#ffffff14] p-4 rounded-2xl flex flex-col justify-between shadow-xl">
+              <span className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
+                <span>Expected Calibration Error (ECE)</span>
+                <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+              </span>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-bold font-mono text-amber-400">
+                  {report.ece !== null ? report.ece.toFixed(4) : 'N/A'}
+                </span>
+                {report.ece !== null && (
+                  <span className="text-xs font-mono text-slate-400">
+                    ({(report.ece * 100).toFixed(1)}%)
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                ECE measures how closely stated edge confidences match empirical accuracy rates across buckets.
+              </span>
+            </div>
+
+            <div className="bg-[#12152A] border border-[#ffffff14] p-4 rounded-2xl flex flex-col justify-between shadow-xl">
+              <span className="text-[11px] font-mono uppercase text-slate-400 flex items-center justify-between">
+                <span>Brier Score</span>
+                <HelpCircle className="w-3.5 h-3.5 text-slate-500" />
+              </span>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-bold font-mono text-emerald-400">
+                  {report.brier_score !== null ? report.brier_score.toFixed(4) : 'N/A'}
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+                Brier score is the mean squared error of probabilistic predictions (0.0 represents perfect calibration).
+              </span>
+            </div>
+
+            <div className="bg-[#12152A] border border-[#ffffff14] p-4 rounded-2xl flex flex-col justify-between shadow-xl">
+              <span className="text-[11px] font-mono uppercase text-slate-400">Evaluated Edges</span>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-bold font-mono text-slate-100">
+                  {report.total_edges_with_outcome}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-emerald-400 mt-2">
+                Has ground truth outcome (verified or refuted)
+              </span>
+            </div>
+
+            <div className="bg-[#12152A] border border-[#ffffff14] p-4 rounded-2xl flex flex-col justify-between shadow-xl">
+              <span className="text-[11px] font-mono uppercase text-slate-400">Unverified Excluded</span>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-2xl font-bold font-mono text-slate-400">
+                  {report.total_edges_unverified_excluded}
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-slate-500 mt-2">
+                Awaiting resolution before calibration calculation
+              </span>
+            </div>
           </div>
-        ) : error ? (
-          <div className="bg-[#FF3B3B]/20 border border-[#FF3B3B]/40 text-[#FF3B3B] p-4 rounded-lg font-mono text-xs flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        ) : report ? (
-          <>
-            {/* Prominent Sample Size Warning Banner */}
-            {report.sample_size_warning && (
-              <div className="bg-[#FFAA00]/15 border-2 border-[#FFAA00]/50 rounded-xl p-4 flex items-start gap-3 shadow-lg">
-                <AlertTriangle className="w-5 h-5 text-[#FFAA00] shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-[#FFAA00] mb-0.5 font-mono">
-                    STATISTICAL SAMPLE SIZE WARNING (Section 35/36)
-                  </h4>
-                  <p className="text-xs font-mono text-[#e6e6e6] leading-relaxed">
-                    {report.sample_size_warning}
-                  </p>
-                </div>
-              </div>
-            )}
 
-            {/* Headline Metrics Grid */}
-            <div className="grid grid-cols-4 gap-4">
-              <div className="bg-[#10141d] border border-[#262c38] p-4 rounded-xl flex flex-col justify-between shadow-md">
-                <span className="text-[11px] font-mono uppercase text-[#8a94a6]">Expected Calibration Error (ECE)</span>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono text-[#FFAA00]">
-                    {report.ece !== null ? report.ece.toFixed(4) : 'N/A'}
-                  </span>
-                  {report.ece !== null && (
-                    <span className="text-xs font-mono text-[#8a94a6]">
-                      ({(report.ece * 100).toFixed(1)}%)
-                    </span>
-                  )}
-                </div>
-                <span className="text-[10px] font-mono text-[#6b7280] mt-1">Weighted confidence vs outcome delta</span>
+          {/* 4. Reliability Diagram SVG + Bucket Table */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            {/* Reliability Diagram Card */}
+            <div className="bg-[#12152A] border border-[#ffffff14] rounded-2xl p-5 space-y-4 shadow-xl flex flex-col">
+              <div className="flex items-center justify-between border-b border-[#ffffff0f] pb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-100 font-mono">
+                  Reliability Diagram
+                </h3>
+                <span className="text-[10px] font-mono text-slate-400">Y = Observed vs X = Stated</span>
               </div>
 
-              <div className="bg-[#10141d] border border-[#262c38] p-4 rounded-xl flex flex-col justify-between shadow-md">
-                <span className="text-[11px] font-mono uppercase text-[#8a94a6]">Brier Score</span>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono text-[#00E676]">
-                    {report.brier_score !== null ? report.brier_score.toFixed(4) : 'N/A'}
-                  </span>
-                </div>
-                <span className="text-[10px] font-mono text-[#6b7280] mt-1">Mean squared error (0.0 = perfect)</span>
+              <div className="flex-1 flex flex-col items-center justify-center relative py-4">
+                <svg className="w-64 h-64 overflow-visible" viewBox="0 0 200 200">
+                  {/* Grid Lines */}
+                  <line x1="0" y1="0" x2="200" y2="0" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="0" y1="50" x2="200" y2="50" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="0" y1="100" x2="200" y2="100" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="0" y1="150" x2="200" y2="150" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="0" y1="200" x2="200" y2="200" stroke="rgba(255,255,255,0.08)" />
+
+                  <line x1="0" y1="0" x2="0" y2="200" stroke="rgba(255,255,255,0.08)" />
+                  <line x1="50" y1="0" x2="50" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="100" y1="0" x2="100" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="150" y1="0" x2="150" y2="200" stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                  <line x1="200" y1="0" x2="200" y2="200" stroke="rgba(255,255,255,0.08)" />
+
+                  {/* Diagonal Ideal Line (y = x) */}
+                  <line x1="0" y1="200" x2="200" y2="0" stroke="#6366F1" strokeWidth="2" strokeDasharray="6 6" />
+
+                  {/* Data Points & Connecting Line */}
+                  {(() => {
+                    const validPoints = report.buckets
+                      .filter((b) => b.count > 0 && b.mean_stated_confidence !== null && b.observed_rate !== null)
+                      .map((b) => ({
+                        x: (b.mean_stated_confidence || 0) * 200,
+                        y: 200 - (b.observed_rate || 0) * 200,
+                      }));
+
+                    if (validPoints.length === 0) return null;
+
+                    const polylinePoints = validPoints.map((p) => `${p.x},${p.y}`).join(' ');
+
+                    return (
+                      <>
+                        <polyline points={polylinePoints} fill="none" stroke="#22C55E" strokeWidth="2.5" />
+                        {validPoints.map((p, idx) => (
+                          <circle key={idx} cx={p.x} cy={p.y} r="5" fill="#22C55E" stroke="#0B0D1A" strokeWidth="2" />
+                        ))}
+                      </>
+                    );
+                  })()}
+                </svg>
               </div>
 
-              <div className="bg-[#10141d] border border-[#262c38] p-4 rounded-xl flex flex-col justify-between shadow-md">
-                <span className="text-[11px] font-mono uppercase text-[#8a94a6]">Evaluated Edges</span>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono text-[#e6e6e6]">
-                    {report.total_edges_with_outcome}
-                  </span>
+              <div className="flex items-center justify-between text-[11px] font-mono text-slate-400 pt-2 border-t border-[#ffffff0f]">
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 border-b-2 border-dashed border-[#6366F1]" />
+                  <span>Ideal Calibration</span>
                 </div>
-                <span className="text-[10px] font-mono text-[#00E676] mt-1">Has ground truth outcome</span>
-              </div>
-
-              <div className="bg-[#10141d] border border-[#262c38] p-4 rounded-xl flex flex-col justify-between shadow-md">
-                <span className="text-[11px] font-mono uppercase text-[#8a94a6]">Unverified Excluded</span>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-2xl font-bold font-mono text-[#4A5568]">
-                    {report.total_edges_unverified_excluded}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="w-3 h-0.5 bg-emerald-400" />
+                  <span>Observed Performance</span>
                 </div>
-                <span className="text-[10px] font-mono text-[#8a94a6] mt-1">Awaiting verification resolution</span>
               </div>
             </div>
 
-            {/* 5-Bucket Comparison Table / Bar Display */}
-            <div className="bg-[#10141d] border border-[#262c38] rounded-xl p-6 space-y-4 shadow-xl">
-              <div className="flex items-center justify-between border-b border-[#262c38] pb-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-[#e6e6e6] font-mono flex items-center gap-2">
-                  <BarChart3 className="w-4 h-4 text-[#FFAA00]" />
-                  CONFIDENCE RANGE BUCKET CALIBRATION (Section 11.5)
+            {/* 5-Bucket Range Calibration Details Table */}
+            <div className="lg:col-span-2 bg-[#12152A] border border-[#ffffff14] rounded-2xl p-5 space-y-4 shadow-xl">
+              <div className="flex items-center justify-between border-b border-[#ffffff0f] pb-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-100 font-mono flex items-center gap-2">
+                  Confidence Range Bucket Analysis
                 </h3>
-                <span className="text-[11px] font-mono text-[#8a94a6]">
-                  Comparing Stated Confidence vs Observed Correctness Rate
-                </span>
+                <span className="text-[11px] font-mono text-slate-400">5 Calibration Buckets</span>
               </div>
 
-              <div className="space-y-4">
+              <div className="space-y-3">
                 {report.buckets.map((b) => {
                   const hasData = b.count > 0;
                   const statedPct = b.mean_stated_confidence !== null ? b.mean_stated_confidence * 100 : 0;
@@ -177,63 +245,61 @@ export const CalibrationView: React.FC<CalibrationViewProps> = ({
                   return (
                     <div
                       key={b.range}
-                      className="bg-[#0a0e14] border border-[#262c38] rounded-lg p-4 font-mono text-xs space-y-2"
+                      className="bg-[#0B0D1A] border border-[#ffffff14] rounded-xl p-3.5 font-mono text-xs space-y-2"
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <span className="bg-[#262c38] text-[#FFAA00] font-bold px-2 py-0.5 rounded text-xs">
+                          <span className="bg-[#6366F1]/15 text-indigo-300 font-bold px-2.5 py-0.5 rounded-md border border-[#6366F1]/30">
                             Range {b.range}
                           </span>
-                          <span className="text-[#8a94a6]">
-                            Sample Count: <strong className="text-[#e6e6e6]">{b.count}</strong>
+                          <span className="text-slate-400">
+                            Sample Count: <strong className="text-slate-100">{b.count}</strong>
                           </span>
                         </div>
 
                         {hasData ? (
                           <div className="flex items-center gap-4 text-xs">
                             <span>
-                              Stated Conf: <strong className="text-[#FFAA00]">{statedPct.toFixed(1)}%</strong>
+                              Stated: <strong className="text-amber-400">{statedPct.toFixed(1)}%</strong>
                             </span>
                             <span>
-                              Observed Rate: <strong className="text-[#00E676]">{obsPct.toFixed(1)}%</strong>
+                              Observed: <strong className="text-emerald-400">{obsPct.toFixed(1)}%</strong>
                             </span>
                           </div>
                         ) : (
-                          <span className="text-[#6b7280] italic text-[11px] px-2 py-0.5 rounded bg-[#10141d] border border-[#262c38]">
-                            {b.note || 'no data in this range'}
+                          <span className="text-slate-500 italic text-[11px] px-2.5 py-0.5 rounded bg-[#12152A] border border-[#ffffff0a]">
+                            no data in this range
                           </span>
                         )}
                       </div>
 
-                      {/* Visual Bar Comparisons */}
+                      {/* Bar Comparisons */}
                       {hasData ? (
                         <div className="space-y-1.5 pt-1">
-                          {/* Stated Confidence Bar */}
                           <div className="flex items-center gap-3">
-                            <span className="w-28 text-[10px] text-[#8a94a6] text-right shrink-0">Stated Conf</span>
-                            <div className="flex-1 bg-[#10141d] h-3 rounded overflow-hidden border border-[#262c38] relative">
+                            <span className="w-24 text-[10px] text-slate-400 text-right shrink-0">Stated Conf</span>
+                            <div className="flex-1 bg-[#12152A] h-2.5 rounded-full overflow-hidden border border-[#ffffff0a]">
                               <div
-                                className="bg-[#FFAA00] h-full transition-all duration-500 rounded"
+                                className="bg-amber-400 h-full transition-all duration-500 rounded-full"
                                 style={{ width: `${statedPct}%` }}
                               />
                             </div>
-                            <span className="w-12 text-[10px] text-[#FFAA00] font-bold">{statedPct.toFixed(0)}%</span>
+                            <span className="w-10 text-[10px] text-amber-400 font-bold">{statedPct.toFixed(0)}%</span>
                           </div>
 
-                          {/* Observed Correctness Bar */}
                           <div className="flex items-center gap-3">
-                            <span className="w-28 text-[10px] text-[#8a94a6] text-right shrink-0">Observed Rate</span>
-                            <div className="flex-1 bg-[#10141d] h-3 rounded overflow-hidden border border-[#262c38] relative">
+                            <span className="w-24 text-[10px] text-slate-400 text-right shrink-0">Observed Rate</span>
+                            <div className="flex-1 bg-[#12152A] h-2.5 rounded-full overflow-hidden border border-[#ffffff0a]">
                               <div
-                                className="bg-[#00E676] h-full transition-all duration-500 rounded"
+                                className="bg-emerald-400 h-full transition-all duration-500 rounded-full"
                                 style={{ width: `${obsPct}%` }}
                               />
                             </div>
-                            <span className="w-12 text-[10px] text-[#00E676] font-bold">{obsPct.toFixed(0)}%</span>
+                            <span className="w-10 text-[10px] text-emerald-400 font-bold">{obsPct.toFixed(0)}%</span>
                           </div>
                         </div>
                       ) : (
-                        <div className="h-6 bg-[#10141d] rounded border border-[#262c38]/50 flex items-center justify-center text-[10px] text-[#6b7280]">
+                        <div className="h-6 bg-[#12152A] rounded-lg border border-[#ffffff0a] flex items-center justify-center text-[10px] text-slate-500">
                           Bucket is empty - no edges fell into range {b.range}
                         </div>
                       )}
@@ -242,9 +308,9 @@ export const CalibrationView: React.FC<CalibrationViewProps> = ({
                 })}
               </div>
             </div>
-          </>
-        ) : null}
-      </div>
+          </div>
+        </>
+      ) : null}
     </div>
   );
 };

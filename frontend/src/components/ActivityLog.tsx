@@ -7,6 +7,8 @@ interface ActivityLogProps {
   loading: boolean;
   activeStepNumber?: number | null;
   onSelectStep?: (stepNumber: number) => void;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }
 
 export const ActivityLog: React.FC<ActivityLogProps> = ({
@@ -14,14 +16,25 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
   loading,
   activeStepNumber,
   onSelectStep,
+  isOpen,
+  onToggle,
 }) => {
-  const [collapsed, setCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(true);
+  const collapsed = isOpen !== undefined ? !isOpen : internalCollapsed;
+
+  const handleToggle = () => {
+    if (onToggle) {
+      onToggle();
+    } else {
+      setInternalCollapsed((prev) => !prev);
+    }
+  };
 
   if (collapsed) {
     return (
       <aside className="w-10 bg-[#10141d] border-r border-[#262c38] flex flex-col items-center py-3 select-none shrink-0 transition-all">
         <button
-          onClick={() => setCollapsed(false)}
+          onClick={handleToggle}
           className="p-1.5 text-[#8a94a6] hover:text-[#e6e6e6] rounded hover:bg-[#262c38] cursor-pointer"
           title="Expand Activity Log"
         >
@@ -46,7 +59,7 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
           </span>
         </div>
         <button
-          onClick={() => setCollapsed(true)}
+          onClick={handleToggle}
           className="p-1 text-[#8a94a6] hover:text-[#e6e6e6] rounded hover:bg-[#262c38] cursor-pointer"
           title="Collapse Sidebar"
         >

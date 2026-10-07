@@ -61,8 +61,23 @@ CONFIDENCE_RATIONALE_TABLE: Dict[str, Dict[str, Any]] = {
         "confidence": 1.0,
         "justification": "Open port and service discovered directly through Nmap banner inspection.",
         "category": "Verified network discovery (Deterministic)"
+    },
+    "has_endpoint": {
+        "confidence": 1.0,
+        "justification": "Endpoint discovered under service.",
+        "category": "Verified network discovery (Deterministic)"
+    },
+    "ffuf:endpoint_discovered": {
+        "confidence": 1.0,
+        "justification": "Endpoint discovered under service by FFUF.",
+        "category": "Verified network discovery (Deterministic)"
     }
 }
+
+CONFIDENCE_TABLE: Dict[str, float] = {
+    key: info["confidence"] for key, info in CONFIDENCE_RATIONALE_TABLE.items()
+}
+
 
 
 def get_confidence_rationale(pattern_key: str) -> Dict[str, Any]:

@@ -20,6 +20,7 @@ export interface GraphNode {
   undermined?: boolean;
   properties: Record<string, any>;
   evidence: EvidenceSummary[];
+  created_at?: string;
 }
 
 export interface GraphEdge {
@@ -28,10 +29,14 @@ export interface GraphEdge {
   target_node_id: string;
   relation_type: string;
   confidence?: number | null;
+  evidence_only_confidence?: number | null;
   status: 'unverified' | 'verified' | 'refuted' | 'human_invalidated' | string;
+  verification_outcome?: string | null;
   reasoning?: string | null;
   pattern_key?: string | null;
+  step?: number | null;
 }
+
 
 export interface GraphData {
   scan_id: string;
@@ -99,3 +104,13 @@ export interface CalibrationReport {
   brier_score: number | null;
   sample_size_warning: string;
 }
+
+export interface EdgeReverifyResponse {
+  edge_id: string;
+  eligible: boolean;
+  new_status: string;
+  verification_outcome: string;
+  reason: string;
+}
+
+

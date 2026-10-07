@@ -155,6 +155,7 @@ class GraphNodeResponse(BaseModel):
     undermined: bool = False
     properties: Dict[str, Any]
     evidence: List[EvidenceSummary] = []
+    created_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

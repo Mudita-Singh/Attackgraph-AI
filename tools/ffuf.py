@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 from typing import Dict, Any, List, Optional
 from sqlalchemy.orm import Session
 
-from db.models import Scan, Node, Evidence
+from db.models import Scan, Node, Evidence, Edge
 from tools.envelope import ToolOutputEnvelope
 
 def get_ffuf_binary() -> Optional[str]:
@@ -66,7 +66,7 @@ def probe_calibration_baseline(target_base: str) -> Dict[str, Any]:
         }
 
 
-def execute_ffuf_scan(scan_id: str, db: Session, wordlist_path: Optional[str] = None) -> Dict[str, Any]:
+def execute_ffuf_scan(scan_id: str, db: Session, wordlist_path: Optional[str] = None, step: Optional[int] = None) -> Dict[str, Any]:
     """
     Executes ffuf endpoint fuzzing against target stored in scan record.
     1. Looks up scan record by scan_id.
@@ -190,8 +190,29 @@ def execute_ffuf_scan(scan_id: str, db: Session, wordlist_path: Optional[str] = 
     db.add(evidence)
     db.flush()
 
-    # Create Node rows for discovered endpoints
+    # Query ppp_service / service nodes belonging to this scan
+    service_nodes = db.query(Node).filter(
+        Node.scan_id == scan.id,
+        Node.node_type.ilike("%service%")
+    ).all()
+
+    target_service_node = None
+    if service_nodes:
+        # Match by port if properties has 'port'
+        for s_node in service_nodes:
+            s_port = (s_node.properties or {}).get("port")
+            if s_port is not None and str(s_port) == str(port):
+                target_service_node = s_node
+                break
+        if not target_service_node:
+            target_service_node = service_nodes[0]
+
+    # Create Node rows and has_endpoint Edge rows for discovered endpoints
+    from graph.confidence import CONFIDENCE_TABLE
+    conf_value = CONFIDENCE_TABLE.get("has_endpoint", 1.0)
+
     created_nodes = []
+    created_edges = []
     for item in parsed_findings_list:
         endpoint_path = item["path"]
         node_label = f"Endpoint: {endpoint_path}"
@@ -209,17 +230,47 @@ def execute_ffuf_scan(scan_id: str, db: Session, wordlist_path: Optional[str] = 
             }
         )
         db.add(node)
+        db.flush()
         created_nodes.append(node)
+
+        if target_service_node:
+            existing_edge = db.query(Edge).filter(
+                Edge.scan_id == scan.id,
+                Edge.source_node_id == target_service_node.id,
+                Edge.target_node_id == node.id,
+                Edge.relation_type == "has_endpoint"
+            ).first()
+
+            if not existing_edge:
+                edge = Edge(
+                    scan_id=scan.id,
+                    source_node_id=target_service_node.id,
+                    target_node_id=node.id,
+                    relation_type="has_endpoint",
+                    pattern_key="ffuf:endpoint_discovered",
+                    confidence=conf_value,
+                    evidence_only_confidence=conf_value,
+                    status="verified",
+                    verification_outcome=None,
+                    reasoning="Endpoint discovered by FFUF under this service.",
+                    step=step
+                )
+                db.add(edge)
+                created_edges.append(edge)
 
     scan.status = "FFUF_COMPLETED"
     db.commit()
     db.refresh(evidence)
     for n in created_nodes:
         db.refresh(n)
+    for e in created_edges:
+        db.refresh(e)
 
     return {
         "scan_id": scan.id,
         "evidence": evidence,
         "nodes": created_nodes,
+        "edges": created_edges,
         "envelope": envelope
     }
+
